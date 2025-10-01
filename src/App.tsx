@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Stethoscope } from 'lucide-react';
 import LandingScreen from '@/components/LandingScreen';
 import Sidebar from '@/components/Sidebar';
 import ChatInput from '@/components/ChatInput';
@@ -10,9 +10,9 @@ import LoginPage from '@/components/auth/LoginPage';
 import SignupPage from '@/components/auth/SignupPage';
 import ForgotPasswordPage from '@/components/auth/ForgotPasswordPage';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import { Message, ProtocolData, ProtocolStep, Citation } from '@/types';
+import { Message, ProtocolData } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { searchProtocols, generateProtocol, saveConversation, ConversationMessage } from '@/lib/api';
+import { generateIntelligentProtocol, saveConversation, ConversationMessage } from '@/lib/api';
 
 function App() {
   const { currentUser } = useAuth();
@@ -56,136 +56,8 @@ function App() {
     }
   };
 
-  const cleanStepText = (text: string): string => {
-    if (!text) return '';
-    let t = text.replace(/\s+/g, ' ').trim();
-    t = t.replace(/^([0-9]+[\.)\-:]\s*|[\-•]\s*)+/g, '').trim();
-    t = t.replace(/\s*([0-9]+[\.)])\s*/g, ' ').trim();
-    if (t.length > 0) t = t.charAt(0).toUpperCase() + t.slice(1);
-    if (!(/[\.!?]$/.test(t))) t = t + '.';
-    if (t.length > 140) {
-      const cut = t.slice(0, 140);
-      const idx = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '), cut.lastIndexOf(', '));
-      t = (idx > 80 ? cut.slice(0, idx + 1) : cut.trim()) + (t.length > 150 ? '…' : '');
-    }
-    return t;
-  };
 
-  const normalizeChecklist = (items: { step: number; text: string }[]): { step: number; text: string }[] => {
-    const seen = new Set<string>();
-    const out: { step: number; text: string }[] = [];
-    for (const item of items || []) {
-      const cleaned = cleanStepText(item?.text || '');
-      if (!cleaned || cleaned.length < 4) continue;
-      const key = cleaned.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ step: out.length + 1, text: cleaned });
-    }
-    return out.slice(0, 12);
-  };
 
-  const selectSnippets = (query: string, hits: any[]): string[] => {
-    // Use semantic relevance scoring - trust Elasticsearch scores but add context diversity
-    const scored = (hits || []).map((h) => {
-      const s = h.source || {};
-      let score = h.score || 0;
-      
-      // Boost based on content type relevance to query intent
-      const section = String(s.section || '').toLowerCase();
-      const title = String(s.title || '').toLowerCase();
-      const queryLower = query.toLowerCase();
-      
-      // Boost clinical/management content for protocol queries
-      if (section.includes('checklist') || section.includes('protocol') || section.includes('management')) {
-        score += 1.0;
-      }
-      if (title.includes('protocol') || title.includes('checklist') || title.includes('guidelines')) {
-        score += 0.8;
-      }
-      
-      // Slight penalty for prevention/vaccination when query seems clinical
-      if ((section.includes('prevention') || section.includes('vaccination')) && 
-          (queryLower.includes('treatment') || queryLower.includes('management') || queryLower.includes('protocol'))) {
-        score -= 0.3;
-      }
-      
-      return { h, score };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-
-    const snippets: string[] = [];
-    for (const { h } of scored) {
-      const s = h.source || {};
-      const body = s.body || s.content || s.title;
-      if (!body) continue;
-      snippets.push(String(body));
-      if (snippets.length >= 8) break; // Limit context to avoid overwhelming LLM
-    }
-    return snippets;
-  };
-
-  const mapBackendToProtocolData = (
-    title: string,
-    hits: any[],
-    checklist: { step: number; text: string }[],
-    citations: string[]
-  ): ProtocolData => {
-    const best = hits?.[0]?.source || {};
-    const region = String(best.region || 'Global');
-    const year = String(best.year || new Date().getFullYear());
-    const organization = String(best.organization || 'ProCheck');
-
-    const normalized = normalizeChecklist(checklist);
-    const steps: ProtocolStep[] = normalized.length > 0
-      ? normalized.map((item) => ({ id: item.step, step: item.text, citations: [] }))
-      : (hits || []).slice(0, 6).map((h: any, idx: number) => ({
-          id: idx + 1,
-          step: cleanStepText(h.source?.body || h.source?.content || h.source?.title || '—'),
-          citations: [],
-        }));
-
-    const citationObjs: Citation[] = [];
-    for (let i = 0; i < Math.min(citations.length, 5); i++) {
-      const url = citations[i];
-      citationObjs.push({
-        id: i + 1,
-        source: 'Reference',
-        organization: organization,
-        year,
-        region,
-        url,
-        excerpt: url,
-      });
-    }
-    if (citationObjs.length === 0 && hits?.length) {
-      hits.slice(0, 3).forEach((h: any) => {
-        const url = h.source?.source_url || h.source?.url;
-        if (url) {
-          citationObjs.push({
-            id: citationObjs.length + 1,
-            source: h.source?.title || 'Source',
-            organization: h.source?.organization || organization,
-            year: String(h.source?.year || year),
-            region: h.source?.region || region,
-            url,
-            excerpt: h.source?.section || h.source?.title || url,
-          });
-        }
-      });
-    }
-
-    return {
-      title,
-      region,
-      year,
-      organization,
-      steps,
-      citations: citationObjs,
-      lastUpdated: getUserTimestamp(),
-    };
-  };
 
   // Helper function to get user's local timestamp in backend format
   const getUserTimestamp = () => {
@@ -242,32 +114,21 @@ function App() {
     setIsLoading(true);
 
     try {
-      const searchRes = await searchProtocols({
-        query: content,
-        size: 8,
-      });
+      // Use the new intelligent protocol generation service
+      const result = await generateIntelligentProtocol(content, 8);
 
-      const snippets = selectSnippets(content, searchRes.hits);
+      if (result.error) {
+        throw new Error(result.details || result.error);
+      }
 
-      const genRes = await generateProtocol({
-        title: content,
-        context_snippets: snippets.length > 0 ? snippets : [content],
-        instructions: `Analyze the provided context and generate a concise, actionable medical protocol checklist. Focus on the most relevant information for the user's query. Ignore irrelevant or conflicting information from different sources.`,
-        region: null,
-        year: null,
-      });
-
-      const protocolData: ProtocolData = mapBackendToProtocolData(
-        content,
-        searchRes.hits,
-        genRes.checklist,
-        genRes.citations
-      );
+      // Extract the generated protocol data
+      const protocolData: ProtocolData = result.protocol_data;
+      const responseContent = result.response_content;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: `Here's the comprehensive protocol for your query:`,
+        content: responseContent,
         timestamp: getUserTimestamp(),
         protocolData,
       };
@@ -356,14 +217,39 @@ function App() {
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="text-6xl mb-4">🏥</div>
+                <div className="w-20 h-20 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Stethoscope className="h-10 w-10 text-teal-600" />
+                </div>
                 <h2 className="text-2xl font-semibold text-slate-900 mb-2">
                   Welcome to ProCheck
                 </h2>
-                <p className="text-slate-600 max-w-md">
-                  Ask me about any medical protocol and I'll provide you with 
-                  comprehensive, clinically cited guidelines.
+                <p className="text-slate-600 mb-6 max-w-md">
+                  Ask me about any medical protocol, procedure, or treatment guideline. 
+                  I'll provide you with comprehensive, clinically cited information.
                 </p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSampleQuery("Checklist for pediatric asthma, Mumbai 2024")}
+                    className="text-sm"
+                  >
+                    Pediatric Asthma Protocol
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSampleQuery("Dengue fever protocol Delhi guidelines")}
+                    className="text-sm"
+                  >
+                    Dengue Fever Protocol
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSampleQuery("COVID-19 treatment WHO protocol 2024")}
+                    className="text-sm"
+                  >
+                    COVID-19 Treatment
+                  </Button>
+                </div>
               </div>
             </div>
           )}

@@ -15,9 +15,16 @@ import {
   Users,
   Calendar,
   MapPin,
-  Building
+  Building,
+  AlertTriangle,
+  Stethoscope,
+  Shield,
+  Activity,
+  MessageCircle,
+  Info
 } from 'lucide-react';
 import { ProtocolData } from '@/types';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface ProtocolCardProps {
   protocolData: ProtocolData;
@@ -27,6 +34,7 @@ export default function ProtocolCard({ protocolData }: ProtocolCardProps) {
   const [isSaved, setIsSaved] = useState(false);
   const [isReferencesOpen, setIsReferencesOpen] = useState(false);
   const [savedSteps, setSavedSteps] = useState<number[]>([]);
+  const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(true);
 
   const handleSave = () => {
     setIsSaved(!isSaved);
@@ -109,6 +117,40 @@ export default function ProtocolCard({ protocolData }: ProtocolCardProps) {
 
       {/* Protocol Steps */}
       <CardContent className="space-y-4">
+        {/* Quick Context Banner - if available */}
+        {protocolData.medicalIntelligence && (
+          <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <Info className="h-5 w-5 text-slate-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="flex flex-wrap gap-2 mb-1">
+                {protocolData.medicalIntelligence.medicalContext.age && (
+                  <Badge variant="outline" className="text-xs border-slate-300 text-slate-600">
+                    Age: {protocolData.medicalIntelligence.medicalContext.age}
+                  </Badge>
+                )}
+                {protocolData.medicalIntelligence.medicalContext.urgency && (
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs ${
+                      protocolData.medicalIntelligence.medicalContext.urgency === 'high' ? 'border-red-300 text-red-700 bg-red-50' :
+                      protocolData.medicalIntelligence.medicalContext.urgency === 'medium' ? 'border-amber-300 text-amber-700 bg-amber-50' :
+                      'border-emerald-300 text-emerald-700 bg-emerald-50'
+                    }`}
+                  >
+                    {protocolData.medicalIntelligence.medicalContext.urgency} urgency
+                  </Badge>
+                )}
+                {protocolData.medicalIntelligence.medicalContext.setting && (
+                  <Badge variant="outline" className="text-xs border-slate-300 text-slate-600">
+                    {protocolData.medicalIntelligence.medicalContext.setting}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Protocol Steps */}
         <div className="space-y-3">
           {protocolData.steps.map((step) => (
             <Card key={step.id} className="bg-slate-50 border-slate-200">
@@ -164,6 +206,136 @@ export default function ProtocolCard({ protocolData }: ProtocolCardProps) {
             </Card>
           ))}
         </div>
+
+        {/* Additional Clinical Information - Collapsible */}
+        {protocolData.medicalIntelligence && (protocolData.medicalIntelligence.safetyAlerts.length > 0 || 
+          protocolData.medicalIntelligence.clinicalNotes.length > 0 || 
+          protocolData.clinicalDecisionSupport) && (
+          <Collapsible open={isAdditionalInfoOpen} onOpenChange={setIsAdditionalInfoOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-3 h-auto bg-slate-50 hover:bg-slate-100 mt-2">
+                <span className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Additional Clinical Information
+                </span>
+                {isAdditionalInfoOpen ? (
+                  <ChevronUp className="h-4 w-4 text-slate-500" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-slate-500" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 mt-3">
+              {/* Safety Alerts - Always visible if present */}
+              {protocolData.medicalIntelligence?.safetyAlerts && protocolData.medicalIntelligence.safetyAlerts.length > 0 && (
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <h4 className="text-sm font-semibold text-red-800">Safety Alerts</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {protocolData.medicalIntelligence.safetyAlerts.map((alert, index) => (
+                      <div key={index} className="flex items-start gap-2 text-sm text-red-700">
+                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span>{alert}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Clinical Notes */}
+              {protocolData.medicalIntelligence?.clinicalNotes && protocolData.medicalIntelligence.clinicalNotes.length > 0 && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Stethoscope className="h-4 w-4 text-blue-600" />
+                    <h4 className="text-sm font-semibold text-blue-800">Clinical Notes</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {protocolData.medicalIntelligence.clinicalNotes.map((note, index) => (
+                      <div key={index} className="flex items-start gap-2 text-sm text-blue-700">
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span>{note}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Risk Assessment - Compact */}
+              {protocolData.clinicalDecisionSupport?.riskAssessment && (
+                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="h-4 w-4 text-slate-600" />
+                    <h4 className="text-sm font-semibold text-slate-800">Risk Assessment</h4>
+                    <Badge className={`ml-auto text-xs ${
+                      protocolData.clinicalDecisionSupport.riskAssessment.overall_risk === 'high' ? 'bg-red-100 text-red-700 border-red-200' :
+                      protocolData.clinicalDecisionSupport.riskAssessment.overall_risk === 'moderate' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                      'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    }`}>
+                      {protocolData.clinicalDecisionSupport.riskAssessment.overall_risk}
+                    </Badge>
+                  </div>
+                  {protocolData.clinicalDecisionSupport.riskAssessment.risk_factors.length > 0 && (
+                    <div className="space-y-1.5">
+                      {protocolData.clinicalDecisionSupport.riskAssessment.risk_factors.slice(0, 3).map((factor: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 text-xs text-slate-700">
+                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                          <span>{factor}</span>
+                        </div>
+                      ))}
+                      {protocolData.clinicalDecisionSupport.riskAssessment.risk_factors.length > 3 && (
+                        <div className="text-xs text-slate-500 italic ml-4">
+                          +{protocolData.clinicalDecisionSupport.riskAssessment.risk_factors.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Contraindications - Compact */}
+              {protocolData.clinicalDecisionSupport?.riskAssessment?.contraindications && 
+                protocolData.clinicalDecisionSupport.riskAssessment.contraindications.length > 0 && (
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <h4 className="text-sm font-semibold text-red-800">Contraindications</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {protocolData.clinicalDecisionSupport.riskAssessment.contraindications.map((contra: any, index: number) => (
+                      <div key={index} className="text-xs text-red-700">
+                        <span className="font-medium">{contra.recommendation}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {/* Follow-up Questions - Perplexity Style */}
+        {protocolData.medicalIntelligence?.suggestions && protocolData.medicalIntelligence.suggestions.length > 0 && (
+          <div className="pt-4 border-t border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageCircle className="h-4 w-4 text-slate-600" />
+              <h4 className="text-sm font-semibold text-slate-800">Related Questions</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {protocolData.medicalIntelligence.suggestions.slice(0, 4).map((suggestion, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  className="h-auto py-3 px-4 text-left justify-start text-sm text-slate-700 hover:bg-slate-50 hover:text-teal-600 hover:border-teal-300 whitespace-normal"
+                  onClick={() => console.log('Follow-up question:', suggestion)}
+                >
+                  <span className="line-clamp-2">{suggestion}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Follow-up Actions */}
         <div className="pt-4 border-t border-slate-200">

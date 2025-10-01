@@ -111,15 +111,28 @@ export async function searchProtocols(req: BackendSearchRequest): Promise<Backen
   return res.json();
 }
 
-export async function hybridSearchProtocols(req: BackendSearchRequest): Promise<BackendSearchResponse> {
-  const res = await fetch(`${API_BASE}/protocols/hybrid-search`, {
+export async function intelligentSearchProtocols(req: BackendSearchRequest): Promise<any> {
+  const res = await fetch(`${API_BASE}/protocols/intelligent-search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Hybrid search failed: ${res.status} ${text}`);
+    throw new Error(`Intelligent search failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+export async function getMedicalSuggestions(query: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/protocols/medical-suggestions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Medical suggestions failed: ${res.status} ${text}`);
   }
   return res.json();
 }
@@ -133,6 +146,18 @@ export async function generateProtocol(req: BackendGenerateRequest): Promise<Bac
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Generate failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+export async function generateIntelligentProtocol(query: string, size: number = 8): Promise<any> {
+  const res = await fetch(`${API_BASE}/protocols/generate-intelligent?query=${encodeURIComponent(query)}&size=${size}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Intelligent protocol generation failed: ${res.status} ${text}`);
   }
   return res.json();
 }

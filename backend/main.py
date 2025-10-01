@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
+from typing import List
 from config.settings import settings
 from models.protocol_models import (
     ProtocolSearchRequest,
@@ -32,6 +33,9 @@ from services.elasticsearch_service import (
 )
 from services.gemini_service import summarize_checklist
 from services.firestore_service import FirestoreService
+from services.enhanced_search_service import enhanced_search_service
+from services.clinical_decision_service import clinical_decision_service
+from services.intelligent_protocol_service import intelligent_protocol_service
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -136,6 +140,153 @@ async def protocols_search(payload: ProtocolSearchRequest):
     total = es_resp.get("hits", {}).get("total", {}).get("value", 0)
     took = es_resp.get("took", 0)
     return ProtocolSearchResponse(total=total, hits=hits, took_ms=took)
+
+@app.post("/protocols/intelligent-search")
+async def protocols_intelligent_search(payload: ProtocolSearchRequest):
+    """Enhanced search with medical NLP and intelligence"""
+    if not settings.elasticsearch_configured:
+        raise HTTPException(status_code=400, detail="Elasticsearch is not configured.")
+    
+    try:
+        # Use enhanced search service
+        result = enhanced_search_service.intelligent_search(
+            query=payload.query or "",
+            filters=payload.filters,
+            size=payload.size or 10
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=502, detail=result)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "intelligent_search_error", "details": str(e)})
+
+@app.post("/protocols/medical-suggestions")
+async def get_medical_suggestions(query: str):
+    """Get medical suggestions and query analysis"""
+    try:
+        suggestions = enhanced_search_service.get_medical_suggestions(query)
+        return suggestions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "suggestions_error", "details": str(e)})
+
+@app.post("/protocols/generate-intelligent")
+async def generate_intelligent_protocol(query: str, size: int = 8):
+    """Generate comprehensive medical protocol using intelligent search + LLM generation"""
+    if not settings.elasticsearch_configured:
+        raise HTTPException(status_code=400, detail="Elasticsearch is not configured.")
+    if not settings.gemini_configured:
+        raise HTTPException(status_code=400, detail="Gemini AI is not configured.")
+    
+    try:
+        result = intelligent_protocol_service.generate_intelligent_protocol(query, size)
+        
+        if "error" in result:
+            raise HTTPException(status_code=502, detail=result)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "intelligent_protocol_error", "details": str(e)})
+
+@app.post("/clinical/risk-assessment")
+async def clinical_risk_assessment(patient_data: dict, protocol_data: dict):
+    """Get clinical risk assessment and patient-specific recommendations"""
+    try:
+        # Create patient context from request data
+        patient_context = PatientContext(
+            age=patient_data.get("age"),
+            gender=patient_data.get("gender"),
+            weight=patient_data.get("weight"),
+            allergies=patient_data.get("allergies", []),
+            medical_history=patient_data.get("medical_history", []),
+            current_medications=patient_data.get("current_medications", []),
+            pregnancy_status=patient_data.get("pregnancy_status"),
+            setting=patient_data.get("setting")
+        )
+        
+        # Perform risk assessment
+        risk_assessment = clinical_decision_service.assess_patient_risk(patient_context, protocol_data)
+        
+        # Get patient-specific recommendations
+        recommendations = clinical_decision_service.get_patient_specific_recommendations(
+            patient_context, 
+            protocol_data.get("query", "")
+        )
+        
+        return {
+            "risk_assessment": {
+                "overall_risk": risk_assessment.overall_risk.value,
+                "risk_factors": risk_assessment.risk_factors,
+                "recommendations": risk_assessment.recommendations,
+                "contraindications": risk_assessment.contraindications,
+                "dosage_adjustments": risk_assessment.dosage_adjustments
+            },
+            "patient_recommendations": recommendations
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "risk_assessment_error", "details": str(e)})
+
+@app.post("/clinical/knowledge-graph")
+async def get_knowledge_graph_data(entities: List[str]):
+    """Get medical knowledge graph data for given entities"""
+    try:
+        from services.medical_knowledge_graph import medical_knowledge_graph
+        
+        result = {
+            "entities": {},
+            "relationships": {},
+            "differential_diagnosis": [],
+            "treatment_recommendations": [],
+            "contraindications": []
+        }
+        
+        for entity in entities:
+            concept = medical_knowledge_graph.find_concept(entity)
+            if concept:
+                result["entities"][entity] = {
+                    "name": concept.name,
+                    "type": concept.concept_type,
+                    "severity": concept.severity,
+                    "category": concept.category,
+                    "aliases": concept.aliases
+                }
+                
+                # Get related concepts
+                related = medical_knowledge_graph.get_related_concepts(concept.id)
+                result["relationships"][entity] = [
+                    {
+                        "target": target.name,
+                        "type": rel.relationship_type.value,
+                        "strength": rel.strength,
+                        "evidence": rel.evidence_level
+                    }
+                    for target, rel in related[:5]
+                ]
+                
+                # Get differential diagnosis if it's a symptom
+                if concept.concept_type == "symptom":
+                    differential = medical_knowledge_graph.get_differential_diagnosis([entity])
+                    result["differential_diagnosis"].extend([
+                        {"condition": cond.name, "score": score, "severity": cond.severity}
+                        for cond, score in differential[:3]
+                    ])
+                
+                # Get treatment recommendations if it's a condition
+                if concept.concept_type == "condition":
+                    treatments = medical_knowledge_graph.get_treatment_recommendations(entity)
+                    result["treatment_recommendations"].extend([
+                        {"treatment": treat.name, "type": rel.relationship_type.value, "strength": rel.strength}
+                        for treat, rel in treatments[:3]
+                    ])
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "knowledge_graph_error", "details": str(e)})
 
 @app.post("/protocols/generate", response_model=ProtocolGenerateResponse)
 async def protocols_generate(payload: ProtocolGenerateRequest):

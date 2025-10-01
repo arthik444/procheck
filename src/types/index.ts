@@ -24,6 +24,91 @@ export interface Citation {
   excerpt: string;
 }
 
+export interface MedicalIntelligence {
+  intent: string;
+  entities: Array<{
+    text: string;
+    type: string;
+    confidence: number;
+  }>;
+  medicalContext: Record<string, any>;
+  suggestions: string[];
+  safetyAlerts: string[];
+  clinicalNotes: string[];
+  relatedConcepts: string[];
+  knowledge_graph?: {
+    primary_conditions: Array<{
+      name: string;
+      severity: string;
+      category: string;
+    }>;
+    symptoms: Array<{
+      name: string;
+      severity: string;
+      category: string;
+    }>;
+    treatments: Array<{
+      name: string;
+      severity: string;
+      category: string;
+    }>;
+    drugs: Array<{
+      name: string;
+      severity: string;
+      category: string;
+    }>;
+    emergency_indicators: Array<{
+      name: string;
+      severity: string;
+    }>;
+    contraindications: Array<{
+      name: string;
+      type: string;
+    }>;
+    related_conditions: Array<{
+      name: string;
+      severity: string;
+      category: string;
+    }>;
+    differential_diagnosis: Array<{
+      name: string;
+      score: number;
+      severity: string;
+    }>;
+  };
+}
+
+export interface ClinicalDecisionSupport {
+  riskAssessment?: {
+    overall_risk: string;
+    risk_factors: string[];
+    recommendations: string[];
+    contraindications: Array<{
+      drug?: string;
+      allergy?: string;
+      reason: string;
+      severity: string;
+      recommendation: string;
+    }>;
+    dosage_adjustments: Array<{
+      type: string;
+      description: string;
+      condition?: string;
+      adjustments?: string[];
+    }>;
+  };
+  patientRecommendations?: {
+    patient_context: {
+      age_group: string;
+      risk_profile: string;
+      special_considerations: string[];
+    };
+    protocol_modifications: string[];
+    monitoring_requirements: string[];
+    contraindication_warnings: string[];
+  };
+}
+
 export interface ProtocolData {
   title: string;
   region: string;
@@ -32,6 +117,8 @@ export interface ProtocolData {
   steps: ProtocolStep[];
   citations: Citation[];
   lastUpdated?: string;
+  medicalIntelligence?: MedicalIntelligence;
+  clinicalDecisionSupport?: ClinicalDecisionSupport;
 }
 
 export interface RecentSearch {
